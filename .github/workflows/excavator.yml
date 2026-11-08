@@ -6,8 +6,10 @@ on:
     # run every 4 hours
     - cron: '20 */4 * * *'
 
+# Excavator pushes over SSH with the repository's deploy key (the CI_BUILD_KEY secret, given to checkout), which the
+# ruleset on main lets through; the workflow's own token cannot push to a branch that needs pull requests.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   excavate:
@@ -16,6 +18,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.CI_BUILD_KEY }}
+      # By hand: check that the deploy key can still push, without pushing anything.
+      - name: Check the deploy key
+        if: github.event_name == 'workflow_dispatch'
+        run: git push --dry-run origin HEAD:refs/heads/main
       - name: Excavate
         uses: ScoopInstaller/GithubActions@5bceeda181721d9d10a18fdcc3ddca6f33467ae6 # v3.0.0
         env:
