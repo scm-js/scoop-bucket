@@ -1,30 +1,68 @@
 name: Excavator
 
+# Brings the manifests up to their apps' newest versions: Scoop's checkver reads each manifest's `checkver` and
+# rewrites it from its `autoupdate` (for scmjs, the newest scm-js release and the hash in its SHA256SUMS), and each
+# updated manifest is committed and pushed to the branch it ran on (main, on the schedule).
+#
+# This replaces ScoopInstaller/GithubActions' Excavator, which always pushes over HTTPS with the workflow's own
+# token. main needs pull requests, which that token cannot bypass, so the push here goes over SSH with the
+# repository's deploy key (the CI_BUILD_KEY secret, given to checkout), which the ruleset lets through.
+# Run by hand, it also checks with a dry-run push that the key can still write.
+
 on:
   workflow_dispatch:
   schedule:
     # run every 4 hours
     - cron: '20 */4 * * *'
 
-# Excavator pushes over SSH with the repository's deploy key (the CI_BUILD_KEY secret, given to checkout), which the
-# ruleset on main lets through; the workflow's own token cannot push to a branch that needs pull requests.
 permissions:
   contents: read
+
+concurrency:
+  group: excavator
 
 jobs:
   excavate:
     name: Excavate
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ssh-key: ${{ secrets.CI_BUILD_KEY }}
-      # By hand: check that the deploy key can still push, without pushing anything.
+      - name: Checkout Scoop
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ScoopInstaller/Scoop
+          path: .scoop_core
+          persist-credentials: false
       - name: Check the deploy key
         if: github.event_name == 'workflow_dispatch'
-        run: git push --dry-run origin HEAD:refs/heads/main
-      - name: Excavate
-        uses: ScoopInstaller/GithubActions@5bceeda181721d9d10a18fdcc3ddca6f33467ae6 # v3.0.0
+        run: git push --dry-run origin HEAD:refs/heads/${{ github.ref_name }}
+      - name: Check for new versions
         env:
-          SKIP_UPDATED: 1
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $env:SCOOP_HOME = Convert-Path .\.scoop_core
+          .\bin\checkver.ps1 -App * -Update -ThrowError
+          git status --short -- bucket
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          $changed = @(git diff --name-only -- bucket)
+          foreach ($file in $changed) {
+            $app = [IO.Path]::GetFileNameWithoutExtension($file)
+            $version = (Get-Content $file -Raw | ConvertFrom-Json).version
+            git commit -q -m "${app}: Update to version $version" -- $file
+            Write-Output "${app}: $version"
+          }
+          if ($changed.Count -gt 0) {
+            git push origin HEAD:refs/heads/${{ github.ref_name }}
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Output 'Every manifest is up to date.'
+          }
