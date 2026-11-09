@@ -1,12 +1,12 @@
 {
-    "version": "0.12.1",
+    "version": "0.13.0",
     "description": "StarCraft: Brood War maps, replays and bots from the command line.",
     "homepage": "https://docs.scmjs.dev/cli/",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/scm-js/scm-js/releases/download/v0.12.1/scmjs-cli-windows-x64.zip",
-            "hash": "8a964c631be06b5fe80adccc4a4dcb22424e97176c98be6a616412c8597f4e9b"
+            "url": "https://github.com/scm-js/scm-js/releases/download/v0.13.0/scmjs-cli-windows-x64.zip",
+            "hash": "9c797fe9bc5cf6341f4c052eb9fc8cedef659d6ecd91196e4ba501a227e9303a"
         }
     },
     "bin": "scmjs.exe",
